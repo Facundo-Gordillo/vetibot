@@ -1,0 +1,16 @@
+{
+  "name": "VetiBot · Triage veterinario",
+  "short_name": "VetiBot",
+  "description": "Asistente de triage veterinario: clasifica la urgencia de tu mascota y te guía al siguiente paso.",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#12b7b4",
+  "background_color": "#e8fbf7",
+  "categories": ["health", "medical", "lifestyle"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

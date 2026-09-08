@@ -1,0 +1,28 @@
+# Dependencias
+node_modules/
+
+# Builds
+server/dist/
+client/dist/
+
+# Entorno / secretos
+.env
+.env.*
+!.env.example
+!*/.env.example
+
+# Base de datos SQLite (persistencia local; no versionar datos)
+server/data/*.db
+server/data/*.db-journal
+server/data/*.db-wal
+server/data/*.db-shm
+server/data/sponsors.json
+
+# Logs
+npm-debug.log*
+*.log
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
