@@ -101,6 +101,18 @@ app.use(
     message: { error: "Estás enviando mensajes muy rápido. Esperá un momento." },
   })
 );
+// Transcripción de audio: también dispara una llamada real a un proveedor
+// externo (costo + cuota), mismo criterio que /chat/send.
+app.use(
+  "/api/chat/transcribe",
+  rateLimit({
+    windowMs: 60_000,
+    limit: 20,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    message: { error: "Estás mandando audios muy rápido. Esperá un momento." },
+  })
+);
 
 // Un cliente que corta la conexión durante una espera larga (IA/Overpass) emite
 // un "error" en el socket. Escucharlo evita que el evento no manejado mate el proceso.

@@ -958,6 +958,31 @@ button {
   opacity: 0.5;
 }
 
+.composer-mic {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: none;
+  background: var(--icon-btn-bg);
+  box-shadow: var(--shadow-bubble);
+  font-size: 18px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.15s ease, color 0.15s ease;
+}
+.composer-mic:active {
+  transform: scale(0.92);
+}
+.composer-mic:disabled {
+  opacity: 0.5;
+}
+.composer-mic.recording {
+  background: #ef4444;
+  color: #fff;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
 .composer input {
   flex: 1;
   min-width: 0;

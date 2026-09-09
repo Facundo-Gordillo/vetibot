@@ -23,6 +23,15 @@ const SUGGESTIONS = [
   "Mi perro vomita y tiene diarrea",
 ];
 
+// Tope de duración de un mensaje de voz: mantiene el audio corto (costo y
+// latencia de transcripción bajos) y evita grabaciones accidentales largas.
+const MAX_RECORD_SECONDS = 60;
+
+function formatRecordTime(totalSeconds: number): string {
+  const s = totalSeconds % 60;
+  return `0:${s.toString().padStart(2, "0")}`;
+}
+
 export default function ChatPage() {
   const { user, logout } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -37,8 +46,122 @@ export default function ChatPage() {
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const { unread, markSeen } = useUnreadBadge(user?.id, messages);
+
+  // --- Mensajes de voz: grabar con MediaRecorder y transcribir en el server ---
+  const canRecordAudio =
+    typeof window !== "undefined" &&
+    typeof window.MediaRecorder !== "undefined" &&
+    Boolean(navigator.mediaDevices?.getUserMedia);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordSecs, setRecordSecs] = useState(0);
+  const [transcribing, setTranscribing] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // El botón de micrófono solo se muestra si el browser soporta grabar Y el
+  // server tiene un proveedor de transcripción configurado (si no, no tiene
+  // sentido ofrecer algo que siempre va a fallar).
+  useEffect(() => {
+    if (!canRecordAudio) return;
+    let cancelled = false;
+    void api
+      .getVoiceStatus()
+      .then((res) => {
+        if (!cancelled) setVoiceEnabled(res.enabled);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [canRecordAudio]);
+
+  // Libera el micrófono si el componente se desmonta a mitad de una grabación.
+  useEffect(() => {
+    return () => {
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+      if (autoStopRef.current) clearTimeout(autoStopRef.current);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    if (autoStopRef.current) {
+      clearTimeout(autoStopRef.current);
+      autoStopRef.current = null;
+    }
+    setRecording(false);
+    mediaRecorderRef.current?.stop();
+    mediaRecorderRef.current = null;
+  }, []);
+
+  const handleTranscribe = useCallback(async (blob: Blob) => {
+    if (blob.size === 0) return;
+    setTranscribing(true);
+    setVoiceError(null);
+    try {
+      const { text } = await api.transcribeAudio(blob);
+      if (text) {
+        setInput((prev) => (prev ? `${prev} ${text}` : text));
+        inputRef.current?.focus();
+      } else {
+        setVoiceError("No se entendió el audio. Probá grabar de nuevo, más cerca del micrófono.");
+      }
+    } catch (err) {
+      setVoiceError(err instanceof Error ? err.message : "No se pudo transcribir el audio.");
+    } finally {
+      setTranscribing(false);
+    }
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    setVoiceError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const preferredType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((t) =>
+        window.MediaRecorder.isTypeSupported?.(t)
+      );
+      const recorder = preferredType
+        ? new MediaRecorder(stream, { mimeType: preferredType })
+        : new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        audioChunksRef.current = [];
+        void handleTranscribe(blob);
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+      setRecordSecs(0);
+      recordTimerRef.current = setInterval(() => setRecordSecs((s) => s + 1), 1000);
+      autoStopRef.current = setTimeout(() => stopRecording(), MAX_RECORD_SECONDS * 1000);
+    } catch {
+      setVoiceError("No pudimos acceder al micrófono. Revisá los permisos del navegador.");
+    }
+  }, [handleTranscribe, stopRecording]);
+
+  const toggleRecording = () => {
+    if (recording) stopRecording();
+    else void startRecording();
+  };
 
   const loadHistory = useCallback(async () => {
     try {
@@ -354,8 +477,10 @@ export default function ChatPage() {
           />
         )}
 
-        {locError && <div className="loc-toast">{locError}</div>}
-        {coords && <div className="loc-toast ok">📍 Ubicación activa</div>}
+        {(voiceError || locError) && <div className="loc-toast">{voiceError || locError}</div>}
+        {!voiceError && !locError && coords && (
+          <div className="loc-toast ok">📍 Ubicación activa</div>
+        )}
 
         <main className="chat-main">
           {isEmpty ? (
@@ -422,16 +547,39 @@ export default function ChatPage() {
           </label>
           <input
             id="chat-input"
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Escribí qué le pasa a tu mascota…"
+            placeholder={
+              recording
+                ? `🔴 Escuchando… ${formatRecordTime(recordSecs)} (tocá el micrófono para terminar)`
+                : transcribing
+                  ? "Transcribiendo tu nota de voz…"
+                  : "Escribí qué le pasa a tu mascota…"
+            }
             maxLength={2000}
-            disabled={sending}
+            disabled={sending || recording || transcribing}
           />
+          {voiceEnabled && (
+            <button
+              type="button"
+              className={`composer-mic${recording ? " recording" : ""}`}
+              onClick={toggleRecording}
+              disabled={sending || transcribing}
+              title={recording ? "Detener grabación" : "Mensaje de voz"}
+              aria-label={
+                recording
+                  ? `Detener grabación (${formatRecordTime(recordSecs)})`
+                  : "Grabar mensaje de voz"
+              }
+            >
+              {transcribing ? "⏳" : recording ? "⏹" : "🎤"}
+            </button>
+          )}
           <button
             type="submit"
             className="send-btn"
-            disabled={sending || !input.trim()}
+            disabled={sending || recording || transcribing || !input.trim()}
             aria-label="Enviar mensaje"
           >
             ➤

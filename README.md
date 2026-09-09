@@ -98,6 +98,7 @@ Todas configurables por ambiente (ver `server/.env.example`):
 | `OPENAI_CHAIN_TIMEOUT_MS` | Techo total de la cadena de modelos (ms). Responde igual aunque no termine. |
 | `OPENAI_ATTEMPT_TIMEOUT_MS` | Timeout por intento (ms): si un modelo tarda mas, se descarta y sigue. |
 | `OPENAI_PRIMARY_GRACE_MS` | Ventana del primario (ms): si Nvidia no responde, abre los fallbacks en paralelo. |
+| `TRANSCRIBE_API_KEY` | Key para transcribir mensajes de voz (Whisper via Groq por defecto). Vacia = el boton de microfono queda oculto en el chat. |
 | `STRIPE_SECRET_KEY` | Stripe. Vacia = modo sandbox (pago simulado). |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web push. `npx web-push generate-vapid-keys`. |
 | `CORS_ORIGIN` | Dominios permitidos, separados por coma. Vacio = todos (solo dev). |

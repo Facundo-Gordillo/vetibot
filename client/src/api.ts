@@ -101,6 +101,27 @@ export const api = {
 
   getHistory: () => request<{ messages: ChatMessage[] }>("/api/chat/history"),
 
+  getVoiceStatus: () => request<{ enabled: boolean }>("/api/chat/voice-status"),
+
+  /** Sube un audio grabado en el browser y devuelve el texto transcripto. */
+  transcribeAudio: async (blob: Blob): Promise<{ text: string }> => {
+    const token = getToken();
+    const headers: Record<string, string> = { "Content-Type": blob.type || "audio/webm" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const res = await fetch("/api/chat/transcribe", {
+      method: "POST",
+      headers,
+      body: blob,
+      signal: AbortSignal.timeout(30_000),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.error ?? "No se pudo transcribir el audio");
+    }
+    return data as { text: string };
+  },
+
   sendMessage: (body: {
     message: string;
     location?: { lat: number; lng: number };

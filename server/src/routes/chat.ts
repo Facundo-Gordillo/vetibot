@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, raw } from "express";
 import { z } from "zod";
 import { db, now, withTransaction } from "../db/index.js";
 import { requireAuth } from "../middlewares/auth.js";
@@ -6,6 +6,7 @@ import { getAiReply } from "../services/ai.js";
 import { findNearbyVets } from "../services/places.js";
 import { resetUnanswered, scheduleFollowUp } from "../services/followup.js";
 import { getPetsSummary, rememberPet } from "../services/pets.js";
+import { transcribeAudio, transcriptionEnabled } from "../services/transcribe.js";
 import type { VetPlace } from "../types.js";
 
 const router = Router();
@@ -208,6 +209,41 @@ router.get("/history", (req, res) => {
 
   res.json({ messages: enriched });
 });
+
+router.get("/voice-status", (_req, res) => {
+  res.json({ enabled: transcriptionEnabled() });
+});
+
+// El audio llega como body binario (no JSON), así que este endpoint tiene su
+// propio parser scopeado a la ruta: express.json() de arriba solo intercepta
+// Content-Type application/json, así que no pisa esto.
+router.post(
+  "/transcribe",
+  raw({ type: () => true, limit: "10mb" }),
+  async (req, res) => {
+    try {
+      if (!transcriptionEnabled()) {
+        res.status(501).json({ error: "La transcripción de voz no está configurada." });
+        return;
+      }
+      const buffer = req.body as Buffer;
+      if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+        res.status(400).json({ error: "No llegó audio para transcribir." });
+        return;
+      }
+      const mimeType = req.headers["content-type"] || "audio/webm";
+      const text = await transcribeAudio(buffer, mimeType);
+      if (!text) {
+        res.status(422).json({ error: "No se entendió el audio. Probá grabar de nuevo, más cerca del micrófono." });
+        return;
+      }
+      res.json({ text });
+    } catch (err) {
+      console.error("[chat] Error en /transcribe:", err);
+      res.status(502).json({ error: "No se pudo transcribir el audio. Probá de nuevo o escribí el mensaje." });
+    }
+  }
+);
 
 router.post("/send", async (req, res) => {
   try {

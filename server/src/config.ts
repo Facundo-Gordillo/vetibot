@@ -60,6 +60,15 @@ export const config = {
     3: Number(process.env.TIER_PRICE_3 || 14900),
   } as Record<number, number>,
 
+  // Transcripción de voz (mensajes de audio → texto).
+  // Groq expone un endpoint compatible con OpenAI (/audio/transcriptions) con
+  // Whisper y tier gratuito generoso, por eso es el default: mismo patrón que
+  // el resto de la app (barato/gratis primero). OpenRouter NO sirve acá: solo
+  // hace proxy de chat/completions, no tiene endpoint de audio.
+  transcribeApiKey: process.env.TRANSCRIBE_API_KEY || "",
+  transcribeBaseUrl: process.env.TRANSCRIBE_BASE_URL || "https://api.groq.com/openai/v1",
+  transcribeModel: process.env.TRANSCRIBE_MODEL || "whisper-large-v3-turbo",
+
   // Notificaciones: push del navegador (Web Push / VAPID).
   appUrl: process.env.APP_URL || "http://localhost:5173",
   vapid: {
