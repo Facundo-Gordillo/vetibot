@@ -60,6 +60,19 @@ export const config = {
     3: Number(process.env.TIER_PRICE_3 || 14900),
   } as Record<number, number>,
 
+  // Mercado Pago (B2B: veterinarias). Reemplaza a Stripe para este flujo —
+  // clientes 100% argentinos, así que evita la incertidumbre de payouts de
+  // Stripe en Argentina. En desarrollo usar credenciales de PRUEBA (Public
+  // Key / Access Token que arrancan como "TEST-..."), nunca las de producción.
+  mercadopago: {
+    accessToken: process.env.MP_ACCESS_TOKEN || "",
+    publicKey: process.env.MP_PUBLIC_KEY || "",
+    // Firma con la que MP firma cada webhook (header x-signature): valida que
+    // la notificación vino realmente de MP y no de un tercero. Se obtiene en
+    // el mismo panel donde se configura la URL del webhook.
+    webhookSecret: process.env.MP_WEBHOOK_SECRET || "",
+  },
+
   // Transcripción de voz (mensajes de audio → texto).
   // Groq expone un endpoint compatible con OpenAI (/audio/transcriptions) con
   // Whisper y tier gratuito generoso, por eso es el default: mismo patrón que
