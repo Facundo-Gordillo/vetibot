@@ -40,6 +40,12 @@ export default function ChatPage() {
   const [coords, setCoords] = useState<Coords | null>(null);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
+  // "Ubicación activa" es una confirmación puntual (tras otorgar permiso o
+  // tocar el botón), no un cartel pegado en pantalla todo el tiempo — por eso
+  // vive aparte de `coords` y se autoborra sola.
+  const [locOk, setLocOk] = useState(false);
+  const locOkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const coordsRef = useRef<Coords | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirm, setConfirm] = useState<"clear" | "reset" | null>(null);
@@ -194,23 +200,46 @@ export default function ChatPage() {
     return () => window.removeEventListener("focus", onFocus);
   }, [markSeen]);
 
-  // Ubicación persistente: recupera la última conocida (caché local o perfil) y,
-  // si hace falta, pide permiso UNA sola vez y la guarda.
+  // Muestra "Ubicación activa" unos segundos y se borra sola — es una
+  // confirmación de que ya quedó guardada, no algo que deba quedar pegado
+  // en pantalla (eso es justo lo que se siente como "estar pidiéndola" todo
+  // el tiempo). Nunca se llama desde una actualización silenciosa de fondo.
+  const flashLocOk = useCallback(() => {
+    setLocOk(true);
+    if (locOkTimerRef.current) clearTimeout(locOkTimerRef.current);
+    locOkTimerRef.current = setTimeout(() => setLocOk(false), 3500);
+  }, []);
+
+  useEffect(() => {
+    coordsRef.current = coords;
+  }, [coords]);
+
+  useEffect(() => {
+    return () => {
+      if (locOkTimerRef.current) clearTimeout(locOkTimerRef.current);
+    };
+  }, []);
+
+  // Ubicación persistente: recupera la última conocida (caché local o perfil)
+  // y, si hace falta, pide permiso UNA sola vez y la guarda. El navegador ya
+  // no vuelve a preguntar después de este primer otorgamiento.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       const loc = await ensureLocation();
       if (!cancelled && loc) {
         setCoords(loc);
+        flashLocOk();
         void api.updateLocation(loc).catch(() => {});
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [flashLocOk]);
 
-  // Mientras la app está abierta, la ubicación se sincroniza sola cuando cambia.
+  // Mientras la app está abierta, la ubicación se sincroniza sola cuando cambia
+  // de posición (silencioso: sin permiso de nuevo y sin mostrar ningún cartel).
   useEffect(() => {
     if (!("geolocation" in navigator)) return;
     let lastSync = 0;
@@ -229,6 +258,26 @@ export default function ChatPage() {
       { enableHighAccuracy: false, maximumAge: 5 * 60 * 1000 }
     );
     return () => navigator.geolocation.clearWatch(id);
+  }, []);
+
+  // Respaldo por tiempo: en un celular quieto, watchPosition puede no disparar
+  // nunca (no hay movimiento que detectar). Este intervalo garantiza una
+  // actualización real cada 5 minutos igual, sin pedir permiso de nuevo (ya
+  // fue otorgado) y sin mostrar ningún aviso — puramente en segundo plano. Si
+  // todavía no hay ubicación (permiso no otorgado), no insiste solo.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!coordsRef.current) return;
+      void refreshLocation()
+        .then((loc) => {
+          setCoords(loc);
+          void api.updateLocation(loc).catch(() => {});
+        })
+        .catch(() => {
+          /* fallo puntual (GPS ocupado, sin señal): se reintenta en 5 min */
+        });
+    }, 5 * 60 * 1000);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -266,6 +315,7 @@ export default function ChatPage() {
     try {
       const loc = await refreshLocation();
       setCoords(loc);
+      flashLocOk();
       void api.updateLocation(loc).catch(() => {});
     } catch (err) {
       setLocError(err instanceof Error ? err.message : "No pudimos obtener tu ubicación.");
@@ -478,7 +528,7 @@ export default function ChatPage() {
         )}
 
         {(voiceError || locError) && <div className="loc-toast">{voiceError || locError}</div>}
-        {!voiceError && !locError && coords && (
+        {!voiceError && !locError && locOk && (
           <div className="loc-toast ok">📍 Ubicación activa</div>
         )}
 
