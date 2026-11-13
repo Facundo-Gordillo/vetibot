@@ -1,129 +1,153 @@
-# VetBot - Asistente de triage veterinario
+# VetiBot – Veterinary Triage Assistant
 
-Asistente de triage veterinario con logica de semaforo: verde (leve), amarillo (moderado) y rojo (emergencia). Escucha que le pasa a tu mascota, clasifica la urgencia y te guia al siguiente paso: desde un consejo en casa hasta la veterinaria abierta mas cercana.
+**English** | [Español](README.es.md)
 
-Funcionalidades principales:
+VetiBot is a full-stack veterinary triage assistant built around a **traffic-light model**: 🟢 green (mild), 🟡 yellow (moderate) and 🔴 red (emergency). It listens to what is happening with your pet, classifies the urgency and guides you to the next step — from at-home advice to the nearest veterinary clinic that is open right now.
 
-- Chat con IA que recolecta sintomas, evalua severidad y detecta banderas rojas.
-- Veterinarias reales (OpenStreetMap / Overpass) con estado de apertura en vivo, telefono, web y rating colaborativo.
-- Seguimiento automatico: el bot vuelve a escribirte para saber como sigue el animal.
-- B2B: veterinarias que pagan por destacarse dentro de su zona (Stripe).
-- PWA: instalable, offline basico y notificaciones push.
+## Features
 
-## Stack
+- **AI triage chat** that collects symptoms, assesses severity and detects red flags. Works with any OpenAI-compatible API (OpenRouter by default), with automatic fallback across free models, per-attempt timeouts and a deterministic local fallback when no API key is configured.
+- **Voice messages**: record audio in the chat and transcribe it with Whisper (via Groq by default). The microphone button is hidden when no transcription key is set.
+- **Real veterinary clinics** from OpenStreetMap (Overpass API) with live opening status, phone, website and community ratings.
+- **Automatic follow-up**: the bot checks back later to ask how the pet is doing.
+- **B2B partner program**: clinics can subscribe (Tier 1–3) to be highlighted and prioritized in their area. Payments via Stripe (simulated sandbox mode when no key is set); Mercado Pago configuration is being prepared.
+- **PWA**: installable, basic offline support and Web Push notifications (VAPID).
+- **Security-minded backend**: JWT auth with bcrypt-hashed passwords, Helmet, rate limiting, Zod validation, configurable CORS, and a production start-up check that refuses to boot with an insecure `JWT_SECRET` or open CORS.
+- Light/dark themes and accessibility options.
 
-| Capa | Tecnologia |
+## Tech Stack
+
+| Layer | Technology |
 | --- | --- |
-| Frontend | React 18 + Vite + React Router + React Markdown |
-| Backend | Node.js + Express + TypeScript |
-| Datos | SQLite (`node:sqlite`, WAL) |
-| IA | OpenAI API (compatible con OpenRouter) |
-| Veterinarias | Overpass (OpenStreetMap) |
-| Pagos B2B | Stripe |
+| Frontend | React 18, Vite, TypeScript, React Router, React Markdown |
+| Backend | Node.js (≥ 22.5), Express, TypeScript |
+| Data | SQLite (`node:sqlite`, WAL mode) |
+| AI | OpenAI SDK (OpenRouter-compatible), Whisper via Groq for voice |
+| Clinics | Overpass API (OpenStreetMap) |
+| B2B payments | Stripe |
 | Push | Web Push / VAPID |
+| Deployment | Single process (API + static frontend), Docker, Render/Railway/Fly |
 
-## Estructura
+## Project Structure
 
 ```
 vetibot/
-├── client/              # Frontend React (Vite)
+├── client/              # React frontend (Vite)
 │   ├── src/
 │   │   ├── pages/       # Home, Chat, Partner (B2B)
 │   │   ├── components/  # Message, VetCard, TriageIndicator, Auth, Settings...
-│   │   ├── hooks/       # useChatAlerts (notificaciones, unread)
-│   │   ├── api.ts       # cliente HTTP tipado
-│   │   ├── auth.tsx     # contexto de autenticacion
-│   │   ├── location.ts  # geolocalizacion con cache
-│   │   ├── push.ts      # suscripcion a notificaciones push
-│   │   ├── themes.ts    # temas claro/oscuro, motivos, accesibilidad
-│   │   └── styles.css   # sistema de diseno (CSS variables)
-│   └── public/          # PWA (manifest, iconos, sw.js)
+│   │   ├── hooks/       # useChatAlerts (notifications, unread count)
+│   │   ├── api.ts       # typed HTTP client
+│   │   ├── auth.tsx     # auth context
+│   │   ├── location.ts  # geolocation with caching
+│   │   ├── push.ts      # push-notification subscription
+│   │   ├── themes.ts    # light/dark themes, accessibility
+│   │   └── styles.css   # design system (CSS variables)
+│   └── public/          # PWA (manifest, icons, sw.js)
 ├── server/              # Backend (Express + SQLite)
 │   ├── src/
 │   │   ├── routes/      # auth, chat, vets, user, partner, stripe, notifications
-│   │   ├── services/    # ai, places, followup, notifications, etc.
-│   │   ├── db/          # esquema + migraciones ligeras
-│   │   ├── middlewares/ # auth JWT
-│   │   ├── config.ts    # todo por variables de ambiente
-│   │   ├── index.ts     # bootstrap + shutdown limpio
+│   │   ├── services/    # ai, places, followup, notifications, transcribe...
+│   │   ├── db/          # schema + lightweight migrations
+│   │   ├── middlewares/ # JWT auth
+│   │   ├── config.ts    # everything configured via environment variables
+│   │   ├── index.ts     # bootstrap + graceful shutdown
 │   │   └── types.ts
-│   └── data/            # sponsors.json (B2B), vetibot.db
-└── package.json         # workspaces npm (client + server)
+│   ├── data/            # sponsors.json (B2B) and vetibot.db (both git-ignored)
+│   └── .env.example
+├── docker/Dockerfile
+├── docs/DEPLOY.md       # deployment guide
+└── package.json         # npm workspaces (client + server)
 ```
 
-La base de datos es SQLite (`server/data/vetibot.db`) y se crea sola al arrancar.
+The SQLite database (`server/data/vetibot.db`) is created automatically on start-up and is never committed.
 
-## Requisitos
+## Getting Started
 
-- Node.js >= 22 (por `node:sqlite`)
-- npm >= 10
+### Requirements
 
-## Inicio rapido (dev)
+- Node.js ≥ 22.5 (for `node:sqlite`)
+- npm ≥ 10
+
+### Installation
 
 ```bash
-# 1) instalar dependencias (workspaces)
+# 1) Install dependencies (npm workspaces)
 npm install
 
-# 2) configurar backend
+# 2) Configure the backend
 cp server/.env.example server/.env
-#    editar server/.env (JWT_SECRET, OPENAI_API_KEY...) - la key es opcional
+#    edit server/.env (JWT_SECRET, OPENAI_API_KEY, ...) – the AI key is optional
 
-# 3) levantar client (Vite :5173) + server (Express :4000)
+# 3) Run client (Vite :5173) + server (Express :4000)
 npm run dev
 ```
 
-Abrir <http://localhost:5173>. El client proxye `/api` hacia el :4000.
+Open <http://localhost:5173>. The client proxies `/api` to port 4000.
 
-## Build de produccion
+### Production build
 
 ```bash
-npm run build   # compila server + client -> client/dist
-npm run start   # sirve el frontend compilado y la API desde :4000
+npm run build   # compiles server + client -> client/dist
+npm run start   # serves the compiled frontend and the API from :4000
 ```
 
-En produccion el server tambien sirve el frontend compilado, asi que alcanza con un solo proceso.
+## Scripts
 
-## Variables clave
-
-Todas configurables por ambiente (ver `server/.env.example`):
-
-| Variable | Descripcion |
+| Script | Description |
 | --- | --- |
-| `JWT_SECRET` | Secreto de sesion. Obligatorio cambiarlo en produccion. |
-| `OPENAI_API_KEY` | Key de IA/OpenRouter. Sin ella se usa el fallback deterministico. |
-| `OPENAI_MODEL` | Modelo principal (ej. `nvidia/nemotron-3-ultra-550b-a55b:free`). |
-| `OPENAI_BASE_URL` | `https://openrouter.ai/api/v1` para usar OpenRouter. |
-| `OPENROUTER_AUTO_FREE` | Default `true`: autodescubre y usa cualquier modelo free de OpenRouter de respaldo si el principal falla. |
-| `OPENROUTER_FREE_MODELS` | Lista manual de respaldo (separada por coma), opcional. |
-| `OPENAI_CHAIN_TIMEOUT_MS` | Techo total de la cadena de modelos (ms). Responde igual aunque no termine. |
-| `OPENAI_ATTEMPT_TIMEOUT_MS` | Timeout por intento (ms): si un modelo tarda mas, se descarta y sigue. |
-| `OPENAI_PRIMARY_GRACE_MS` | Ventana del primario (ms): si Nvidia no responde, abre los fallbacks en paralelo. |
-| `TRANSCRIBE_API_KEY` | Key para transcribir mensajes de voz (Whisper via Groq por defecto). Vacia = el boton de microfono queda oculto en el chat. |
-| `STRIPE_SECRET_KEY` | Stripe. Vacia = modo sandbox (pago simulado). |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web push. `npx web-push generate-vapid-keys`. |
-| `CORS_ORIGIN` | Dominios permitidos, separados por coma. Vacio = todos (solo dev). |
-| `TRUST_PROXY` | `true` detras de Nginx/Render/Railway. |
-| `APP_URL` | URL publica para el link de las notificaciones. |
+| `npm run dev` | Runs server (tsx watch) and client (Vite) concurrently |
+| `npm run build` | Builds server (tsc) and client (tsc + Vite) |
+| `npm run start` | Starts the compiled server (API + frontend) |
+| `npm run db:init` | Initializes the SQLite database |
 
-## Despliegue
+## Environment Variables
 
-La app es un proceso unico (sirve la API y el frontend). Opciones:
+All configuration lives in `server/.env` (see [`server/.env.example`](server/.env.example)). Main variables:
 
-- Render / Railway / Fly: build `npm run build`, start `npm run start`, `PORT` automatico, `TRUST_PROXY=true`.
-- Docker: hay un `Dockerfile` en `docker/`.
-- La BD (SQLite) va a `server/data`. Para multiples instancias se necesita una base remota.
-- CORS: fijar `CORS_ORIGIN` con el dominio de produccion.
+| Variable | Description |
+| --- | --- |
+| `PORT`, `NODE_ENV` | Server port and environment |
+| `JWT_SECRET` | Session secret (≥ 32 chars, required in production) |
+| `CORS_ORIGIN` | Allowed origins, comma-separated (empty = all, dev only) |
+| `TRUST_PROXY` | `true` behind Nginx/Render/Railway |
+| `APP_URL` | Public URL used in notification links |
+| `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` | AI provider (OpenRouter-compatible). Without a key, a deterministic fallback is used |
+| `OPENROUTER_AUTO_FREE`, `OPENROUTER_FREE_MODELS`, `OPENROUTER_MAX_FREE` | Automatic fallback to free OpenRouter models |
+| `OPENAI_CHAIN_TIMEOUT_MS`, `OPENAI_ATTEMPT_TIMEOUT_MS`, `OPENAI_PRIMARY_GRACE_MS` | Timeouts for the model chain |
+| `TRANSCRIBE_API_KEY`, `TRANSCRIBE_BASE_URL`, `TRANSCRIBE_MODEL` | Voice-message transcription (Whisper via Groq) |
+| `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CURRENCY` | Stripe (empty = simulated payments) |
+| `TIER_PRICE_1..3` | B2B plan prices (in cents) |
+| `MP_ACCESS_TOKEN`, `MP_PUBLIC_KEY`, `MP_WEBHOOK_SECRET` | Mercado Pago (prepared) |
+| `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Web Push (`npx web-push generate-vapid-keys`) |
+| `DB_PATH`, `SPONSORS_FILE`, `OVERPASS_URL`, `CLIENT_DIST` | Optional path/endpoint overrides |
 
-## B2B (veterinarias aliadas)
+> Never commit real values: `.env` files and SQLite databases are git-ignored.
 
-La pagina `/partner` permite a una veterinaria:
+## Deployment
 
-1. Cargar su ficha (nombre, direccion, cobertura en km).
-2. Elegir un plan (Tier 1-3) y pagar por suscripcion con Stripe.
-3. Aparecer destacada y priorizada dentro de su zona en las recomendaciones.
+VetiBot runs as a single process that serves both the API and the compiled frontend:
 
-En dev (sin `STRIPE_SECRET_KEY`) el pago se simula y se activa al instante.
+- **Render / Railway / Fly**: build `npm run build`, start `npm run start`, set `NODE_ENV=production`, `TRUST_PROXY=true`, `JWT_SECRET` and `CORS_ORIGIN`.
+- **Docker**: multi-stage `docker/Dockerfile` (non-root user, health check on `/api/health`).
+- SQLite lives in `server/data` — mount a persistent disk. For multiple instances, switch to a remote database.
 
-## Licencia
+See [`docs/DEPLOY.md`](docs/DEPLOY.md) for the full guide.
 
-Proyecto personal. Todos los derechos reservados.
+## B2B (Partner Clinics)
+
+The `/partner` page lets a clinic:
+
+1. Create its profile (name, address, coverage radius in km).
+2. Choose a plan (Tier 1–3) and pay a subscription via Stripe.
+3. Appear highlighted and prioritized in recommendations within its area.
+
+In development (no `STRIPE_SECRET_KEY`) payment is simulated and activated instantly.
+
+## Author
+
+**Facundo Gordillo** – [GitHub](https://github.com/Facundo-Gordillo)
+
+## License
+
+Personal project. All rights reserved.
